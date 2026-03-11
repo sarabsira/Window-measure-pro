@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Save, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, Save, Plus, Trash2, Camera, X, Image } from 'lucide-react';
 import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
 import { Button } from '../components/UI/Button';
 import { Input } from '../components/UI/Input';
-import type { CurtainMeasurements, CurtainType, ControlSide } from '../types';
+import type { CurtainMeasurements, CurtainType, ControlSide, TrackType } from '../types';
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="mb-6">
@@ -43,12 +43,12 @@ const Toggle: React.FC<{
 }> = ({ label, options, value, onChange }) => (
   <div>
     <p className="text-sm font-medium text-slate-700 mb-1.5">{label}</p>
-    <div className="flex gap-2">
+    <div className="flex gap-2 flex-wrap">
       {options.map((opt) => (
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-colors min-h-[44px] ${
+          className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-colors min-h-[44px] min-w-[80px] ${
             value === opt.value
               ? 'bg-teal-400 border-teal-400 text-white'
               : 'bg-white border-slate-200 text-slate-600 hover:border-teal-300'
@@ -61,6 +61,25 @@ const Toggle: React.FC<{
   </div>
 );
 
+const TextArea: React.FC<{
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+}> = ({ label, value, onChange, placeholder, rows = 3 }) => (
+  <div>
+    <label className="block text-sm font-medium text-slate-700 mb-1.5">{label}</label>
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent resize-none"
+    />
+  </div>
+);
+
 export const WindowMeasurement: React.FC = () => {
   const { id, windowId } = useParams<{ id: string; windowId: string }>();
   const navigate = useNavigate();
@@ -68,6 +87,7 @@ export const WindowMeasurement: React.FC = () => {
   const { addToast } = useUIStore();
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const job = jobs.find((j) => j.id === id);
   const win = job?.windows.find((w) => w.id === windowId);
@@ -97,6 +117,25 @@ export const WindowMeasurement: React.FC = () => {
     setLocal((prev) => prev ? { ...prev, measurements: { ...prev.measurements, [key]: value } } : prev);
   };
 
+  const handleAddPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target?.result as string;
+        setLocal((prev) => prev ? { ...prev, photos: [...(prev.photos ?? []), dataUrl] } : prev);
+      };
+      reader.readAsDataURL(file);
+    });
+    // reset input so same file can be re-selected
+    e.target.value = '';
+  };
+
+  const handleRemovePhoto = (idx: number) => {
+    setLocal((prev) => prev ? { ...prev, photos: prev.photos.filter((_, i) => i !== idx) } : prev);
+  };
+
   const handleSave = (andAddAnother = false) => {
     save();
     addToast('Window saved', 'success');
@@ -116,6 +155,7 @@ export const WindowMeasurement: React.FC = () => {
   };
 
   const m = local.measurements;
+  const photos = local.photos ?? [];
 
   return (
     <div className="max-w-xl mx-auto flex flex-col h-full">
@@ -144,6 +184,58 @@ export const WindowMeasurement: React.FC = () => {
           />
         </div>
 
+        {/* Photos */}
+        <Section title="Photos">
+          {photos.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              {photos.map((src, idx) => (
+                <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200">
+                  <img src={src} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => handleRemovePhoto(idx)}
+                    className="absolute top-1 right-1 bg-black/60 rounded-full p-0.5 text-white hover:bg-red-500 transition-colors"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            className="hidden"
+            onChange={handleAddPhoto}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                if (fileInputRef.current) {
+                  fileInputRef.current.removeAttribute('capture');
+                  fileInputRef.current.click();
+                }
+              }}
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border-2 border-dashed border-slate-200 text-slate-400 hover:border-teal-400 hover:text-teal-500 transition-colors text-sm"
+            >
+              <Image size={16} /> Upload Photo
+            </button>
+            <button
+              onClick={() => {
+                if (fileInputRef.current) {
+                  fileInputRef.current.setAttribute('capture', 'environment');
+                  fileInputRef.current.click();
+                }
+              }}
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border-2 border-dashed border-slate-200 text-slate-400 hover:border-teal-400 hover:text-teal-500 transition-colors text-sm"
+            >
+              <Camera size={16} /> Take Photo
+            </button>
+          </div>
+        </Section>
+
         {/* Live preview */}
         {(m.width || m.height) && (
           <div className="bg-slate-50 rounded-xl p-4 mb-6 flex items-center justify-center h-28">
@@ -167,6 +259,23 @@ export const WindowMeasurement: React.FC = () => {
         </Section>
 
         <Section title="Track / Stack Details">
+          <Toggle
+            label="Track"
+            options={[
+              { value: 'existing', label: 'Existing Track' },
+              { value: 'new-single', label: 'New — Single' },
+              { value: 'new-double', label: 'New — Double' },
+            ]}
+            value={m.trackType}
+            onChange={(v) => updateM('trackType', v as TrackType)}
+          />
+          <TextArea
+            label="Track Notes"
+            value={m.trackNotes}
+            onChange={(v) => updateM('trackNotes', v)}
+            placeholder="Any special notes about the track..."
+            rows={2}
+          />
           <div className="grid grid-cols-2 gap-3">
             <NumInput label="Stack Left" value={m.stackLeft} onChange={(v) => updateM('stackLeft', v)} />
             <NumInput label="Stack Right" value={m.stackRight} onChange={(v) => updateM('stackRight', v)} />
@@ -219,6 +328,16 @@ export const WindowMeasurement: React.FC = () => {
             value={m.liningType}
             onChange={(e) => updateM('liningType', e.target.value)}
             placeholder="e.g. Blockout, Unlined"
+          />
+        </Section>
+
+        <Section title="Window Notes">
+          <TextArea
+            label="Special Notes for this Window"
+            value={m.windowNotes}
+            onChange={(v) => updateM('windowNotes', v)}
+            placeholder="Any special instructions, access issues, or notes specific to this window..."
+            rows={4}
           />
         </Section>
       </div>

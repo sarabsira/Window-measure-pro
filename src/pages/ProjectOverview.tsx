@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, ChevronLeft, Trash2, Square, MapPin, User, Phone, Mail } from 'lucide-react';
+import { Plus, ChevronLeft, Trash2, Square, MapPin, User, Phone, Mail, FileDown, Camera } from 'lucide-react';
 import { useProjectStore } from '../store/projectStore';
 import { useUIStore } from '../store/uiStore';
 import { Button } from '../components/UI/Button';
 import { Card } from '../components/UI/Card';
 import { EmptyState } from '../components/UI/EmptyState';
+import { generateAndDownloadPDF } from '../utils/generatePDF';
 
 export const ProjectOverview: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +14,7 @@ export const ProjectOverview: React.FC = () => {
   const { jobs, addWindow, deleteWindow, deleteJob } = useProjectStore();
   const { addToast } = useUIStore();
 
+  const [exporting, setExporting] = useState(false);
   const job = jobs.find((j) => j.id === id);
 
   if (!job) {
@@ -44,6 +46,23 @@ export const ProjectOverview: React.FC = () => {
     if (confirm(`Delete this entire job for ${job.resident.name}? This cannot be undone.`)) {
       deleteJob(job.id);
       navigate('/');
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (job.windows.length === 0) {
+      addToast('Add at least one window before exporting', 'error');
+      return;
+    }
+    setExporting(true);
+    try {
+      await generateAndDownloadPDF(job);
+      addToast('PDF downloaded', 'success');
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to generate PDF', 'error');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -85,7 +104,17 @@ export const ProjectOverview: React.FC = () => {
               <p className="text-slate-400 text-xs mt-2">Consultant: {job.consultantName}</p>
             </div>
           </div>
-          <div className="flex gap-2 shrink-0">
+          <div className="flex gap-2 shrink-0 flex-wrap">
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<FileDown size={14} />}
+              onClick={handleExportPDF}
+              disabled={exporting}
+              className="bg-teal-500/20 border-teal-400/30 text-teal-300 hover:bg-teal-500/30"
+            >
+              {exporting ? 'Generating…' : 'Export PDF'}
+            </Button>
             <Button
               size="sm"
               variant="secondary"
@@ -155,6 +184,11 @@ export const ProjectOverview: React.FC = () => {
                   {m.fabricName && (
                     <span className="px-2 py-0.5 rounded-full text-xs bg-slate-50 text-slate-500 border border-slate-100">
                       {m.fabricName}
+                    </span>
+                  )}
+                  {(w.photos?.length ?? 0) > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-xs bg-slate-50 text-slate-500 border border-slate-100 flex items-center gap-1">
+                      <Camera size={10} /> {w.photos.length}
                     </span>
                   )}
                 </div>

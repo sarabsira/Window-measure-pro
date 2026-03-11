@@ -14,6 +14,9 @@ const defaultMeasurements = (): CurtainMeasurements => ({
   controlSide: null,
   fabricName: '',
   liningType: '',
+  trackType: null,
+  trackNotes: '',
+  windowNotes: '',
 });
 
 interface JobStore {
@@ -59,6 +62,7 @@ export const useProjectStore = create<JobStore>()(
           id: windowId,
           tag: `W${count + 1}`,
           measurements: defaultMeasurements(),
+          photos: [],
           createdAt: new Date(),
         };
         set((state) => ({
