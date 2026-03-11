@@ -1,257 +1,104 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
-import type {
-  Project,
-  Room,
-  WindowMeasurement,
-  ClientDetails,
-  ConsultantDetails,
-  AddressDetails,
-  PhotoData,
-} from '../types';
-import { WindowType, FurnishingType } from '../types';
+import type { Job, CurtainWindow, CurtainMeasurements, ResidentDetails } from '../types';
 
-interface NewProjectData {
-  projectName: string;
-  client: ClientDetails;
-  consultant: ConsultantDetails;
-  address: AddressDetails;
-  rooms: string[];
-  specialNotes?: string;
-}
-
-interface ProjectStore {
-  projects: Omit<Project, 'totalWindows'>[];
-  activeProjectId: string | null;
-  activeRoomId: string | null;
-  activeWindowId: string | null;
-
-  createProject: (data: NewProjectData) => string;
-  updateProject: (id: string, data: Partial<Omit<Project, 'id' | 'totalWindows'>>) => void;
-  deleteProject: (id: string) => void;
-  setActiveProject: (id: string | null) => void;
-  addRoom: (projectId: string, roomName: string) => string;
-  updateRoom: (projectId: string, roomId: string, data: Partial<Room>) => void;
-  deleteRoom: (projectId: string, roomId: string) => void;
-  addWindow: (projectId: string, roomId: string, windowData?: Partial<WindowMeasurement>) => string;
-  updateWindow: (projectId: string, roomId: string, windowId: string, data: Partial<WindowMeasurement>) => void;
-  deleteWindow: (projectId: string, roomId: string, windowId: string) => void;
-  setWindowPhoto: (projectId: string, roomId: string, windowId: string, photoData: PhotoData) => void;
-  setProcessedImage: (projectId: string, roomId: string, windowId: string, imageUrl: string) => void;
-  getProject: (id: string) => Omit<Project, 'totalWindows'> | undefined;
-  getTotalWindows: (projectId: string) => number;
-}
-
-const defaultMeasurements = () => ({
-  windowWidth: null,
-  windowHeight: null,
-  ceilingToFloor: null,
-  ceilingToTopOfArchitrave: null,
-  bottomOfArchitraveToFloor: null,
-  architraveWidth: null,
-  architraveProjection: null,
-  recessDepth: null,
-  stackingClearanceLeft: null,
-  stackingClearanceRight: null,
-  dropToCleats: null,
+const defaultMeasurements = (): CurtainMeasurements => ({
+  width: null,
+  height: null,
+  stackLeft: null,
+  stackRight: null,
+  trackHeightAboveFrame: null,
+  reductionFromFloor: null,
+  curtainType: null,
   controlSide: null,
-  openingDirection: null,
-  notes: '',
+  fabricName: '',
+  liningType: '',
 });
 
-export const useProjectStore = create<ProjectStore>()(
+interface JobStore {
+  jobs: Job[];
+
+  createJob: (data: { village: string; resident: ResidentDetails; consultantName: string }) => string;
+  deleteJob: (id: string) => void;
+  getJob: (id: string) => Job | undefined;
+
+  addWindow: (jobId: string) => string;
+  updateWindow: (jobId: string, windowId: string, data: Partial<CurtainWindow>) => void;
+  deleteWindow: (jobId: string, windowId: string) => void;
+}
+
+export const useProjectStore = create<JobStore>()(
   persist(
     (set, get) => ({
-      projects: [],
-      activeProjectId: null,
-      activeRoomId: null,
-      activeWindowId: null,
+      jobs: [],
 
-      createProject: (data) => {
+      createJob: ({ village, resident, consultantName }) => {
         const id = uuidv4();
         const now = new Date();
-        const newProject: Omit<Project, 'totalWindows'> = {
-          id,
-          projectName: data.projectName,
-          createdAt: now,
-          updatedAt: now,
-          status: 'active',
-          client: data.client,
-          consultant: data.consultant,
-          address: { ...data.address, country: data.address.country || 'New Zealand' },
-          rooms: data.rooms.map((name) => ({
-            id: uuidv4(),
-            name,
-            windows: [],
-          })),
-          specialNotes: data.specialNotes || '',
-        };
         set((state) => ({
-          projects: [...state.projects, newProject],
-          activeProjectId: id,
+          jobs: [
+            ...state.jobs,
+            { id, village, resident, consultantName, windows: [], createdAt: now, updatedAt: now },
+          ],
         }));
         return id;
       },
 
-      updateProject: (id, data) => {
-        set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === id ? { ...p, ...data, updatedAt: new Date() } : p
-          ),
-        }));
+      deleteJob: (id) => {
+        set((state) => ({ jobs: state.jobs.filter((j) => j.id !== id) }));
       },
 
-      deleteProject: (id) => {
-        set((state) => ({
-          projects: state.projects.filter((p) => p.id !== id),
-          activeProjectId: state.activeProjectId === id ? null : state.activeProjectId,
-        }));
-      },
+      getJob: (id) => get().jobs.find((j) => j.id === id),
 
-      setActiveProject: (id) => {
-        set({ activeProjectId: id, activeRoomId: null, activeWindowId: null });
-      },
-
-      addRoom: (projectId, roomName) => {
-        const roomId = uuidv4();
-        set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === projectId
-              ? {
-                  ...p,
-                  rooms: [...p.rooms, { id: roomId, name: roomName, windows: [] }],
-                  updatedAt: new Date(),
-                }
-              : p
-          ),
-        }));
-        return roomId;
-      },
-
-      updateRoom: (projectId, roomId, data) => {
-        set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === projectId
-              ? {
-                  ...p,
-                  rooms: p.rooms.map((r) => (r.id === roomId ? { ...r, ...data } : r)),
-                  updatedAt: new Date(),
-                }
-              : p
-          ),
-        }));
-      },
-
-      deleteRoom: (projectId, roomId) => {
-        set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === projectId
-              ? {
-                  ...p,
-                  rooms: p.rooms.filter((r) => r.id !== roomId),
-                  updatedAt: new Date(),
-                }
-              : p
-          ),
-        }));
-      },
-
-      addWindow: (projectId, roomId, windowData) => {
+      addWindow: (jobId) => {
         const windowId = uuidv4();
-        const project = get().projects.find((p) => p.id === projectId);
-        const room = project?.rooms.find((r) => r.id === roomId);
-        const windowCount = room?.windows.length || 0;
-        const newWindow: WindowMeasurement = {
+        const job = get().jobs.find((j) => j.id === jobId);
+        const count = job?.windows.length ?? 0;
+        const newWindow: CurtainWindow = {
           id: windowId,
-          tag: `W${windowCount + 1}`,
-          windowType: WindowType.SINGLE_HUNG,
-          furnishingType: FurnishingType.ROLLER_BLIND,
-          location: 'inside',
+          tag: `W${count + 1}`,
           measurements: defaultMeasurements(),
-          photo: null,
-          processedImageUrl: null,
-          specialNotes: '',
           createdAt: new Date(),
-          ...windowData,
         };
         set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === projectId
-              ? {
-                  ...p,
-                  rooms: p.rooms.map((r) =>
-                    r.id === roomId
-                      ? { ...r, windows: [...r.windows, newWindow] }
-                      : r
-                  ),
-                  updatedAt: new Date(),
-                }
-              : p
+          jobs: state.jobs.map((j) =>
+            j.id === jobId
+              ? { ...j, windows: [...j.windows, newWindow], updatedAt: new Date() }
+              : j
           ),
         }));
         return windowId;
       },
 
-      updateWindow: (projectId, roomId, windowId, data) => {
+      updateWindow: (jobId, windowId, data) => {
         set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === projectId
+          jobs: state.jobs.map((j) =>
+            j.id === jobId
               ? {
-                  ...p,
-                  rooms: p.rooms.map((r) =>
-                    r.id === roomId
-                      ? {
-                          ...r,
-                          windows: r.windows.map((w) =>
-                            w.id === windowId ? { ...w, ...data } : w
-                          ),
-                        }
-                      : r
-                  ),
+                  ...j,
+                  windows: j.windows.map((w) => (w.id === windowId ? { ...w, ...data } : w)),
                   updatedAt: new Date(),
                 }
-              : p
+              : j
           ),
         }));
       },
 
-      deleteWindow: (projectId, roomId, windowId) => {
+      deleteWindow: (jobId, windowId) => {
         set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === projectId
+          jobs: state.jobs.map((j) =>
+            j.id === jobId
               ? {
-                  ...p,
-                  rooms: p.rooms.map((r) =>
-                    r.id === roomId
-                      ? { ...r, windows: r.windows.filter((w) => w.id !== windowId) }
-                      : r
-                  ),
+                  ...j,
+                  windows: j.windows.filter((w) => w.id !== windowId),
                   updatedAt: new Date(),
                 }
-              : p
+              : j
           ),
         }));
-      },
-
-      setWindowPhoto: (projectId, roomId, windowId, photoData) => {
-        get().updateWindow(projectId, roomId, windowId, { photo: photoData });
-      },
-
-      setProcessedImage: (projectId, roomId, windowId, imageUrl) => {
-        get().updateWindow(projectId, roomId, windowId, { processedImageUrl: imageUrl });
-      },
-
-      getProject: (id) => get().projects.find((p) => p.id === id),
-
-      getTotalWindows: (projectId) => {
-        const project = get().projects.find((p) => p.id === projectId);
-        if (!project) return 0;
-        return project.rooms.reduce((sum, room) => sum + room.windows.length, 0);
       },
     }),
-    {
-      name: 'measurepro-projects',
-    }
+    { name: 'ryman-curtain-jobs' }
   )
 );
